@@ -1,0 +1,63 @@
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+
+# ── config ────────────────────────────────────────────────────
+LABEL_COLS = ["N", "D", "G", "C", "A", "H", "M", "O"]
+
+# ── function ──────────────────────────────────────────────────
+def check_label_distribution(df: pd.DataFrame, split_name: str = "train"):
+    counts = df[LABEL_COLS].sum().astype(int)
+    total  = len(df)
+
+    print(f"\nLabel distribution — {split_name}  (total samples: {total})")
+    for col, cnt in counts.items():
+        bar = "█" * int(30 * cnt / total)
+        print(f"  {col}: {cnt:4d} / {total}  ({100*cnt/total:5.1f}%)  {bar}")
+
+    # multi-label: how many samples have more than one label?
+    multi = (df[LABEL_COLS].sum(axis=1) > 1).sum()
+    print(f"  Multi-label samples: {multi} / {total} ({100*multi/total:.1f}%)")
+
+    return counts
+
+
+def compare_splits(train_df, val_df, test_df):
+    """Check that label proportions are consistent across splits."""
+    print("\n── Proportion comparison across splits ──")
+    print(f"  {'Label':<6} {'Train':>8} {'Val':>8} {'Test':>8}")
+    for col in LABEL_COLS:
+        t = train_df[col].mean() * 100
+        v = val_df[col].mean()   * 100
+        s = test_df[col].mean()  * 100
+        flag = "⚠" if max(t, v, s) - min(t, v, s) > 5 else "✓"
+        print(f"  {col:<6} {t:>7.1f}%  {v:>7.1f}%  {s:>7.1f}%  {flag}")
+    print("  ⚠ = >5% difference between splits (possible imbalanced split)")
+
+    # bar chart
+    x     = np.arange(len(LABEL_COLS))
+    width = 0.25
+    fig, ax = plt.subplots(figsize=(10, 4))
+    ax.bar(x - width, train_df[LABEL_COLS].mean() * 100, width, label="Train")
+    ax.bar(x,         val_df[LABEL_COLS].mean()   * 100, width, label="Val")
+    ax.bar(x + width, test_df[LABEL_COLS].mean()  * 100, width, label="Test")
+    ax.set_xticks(x); ax.set_xticklabels(LABEL_COLS)
+    ax.set_ylabel("Prevalence (%)"); ax.set_title("Label Distribution Across Splits")
+    ax.legend(); ax.grid(axis="y", alpha=0.3)
+    plt.tight_layout()
+    plt.savefig("label_distribution.png", dpi=150)
+    print("\n  Saved: label_distribution.png")
+    plt.show()
+
+
+# ── run ───────────────────────────────────────────────────────
+if __name__ == "__main__":
+    seed = 42   # change as needed
+    train_df = pd.read_csv(f"../real_dataset/train_seed{seed}.csv")
+    val_df   = pd.read_csv(f"../real_dataset/val{seed}.csv")
+    test_df  = pd.read_csv(f"../real_dataset/test{seed}.csv")
+
+    check_label_distribution(train_df, split_name=f"train_seed{seed}")
+    check_label_distribution(val_df,   split_name=f"val_seed{seed}")
+    check_label_distribution(test_df,  split_name=f"test_seed{seed}")
+    compare_splits(train_df, val_df, test_df)

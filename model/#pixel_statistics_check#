@@ -1,0 +1,13 @@
+def check_pixel_stats(loader, n_batches=5):
+    means, stds = [], []
+    for i, (images, _) in enumerate(loader):
+        if i >= n_batches:
+            break
+        means.append(images.mean(dim=[0,2,3]))
+        stds.append(images.std(dim=[0,2,3]))
+
+    mean = torch.stack(means).mean(0)
+    std  = torch.stack(stds).mean(0)
+    print(f"Post-normalization mean (R,G,B): {mean.numpy().round(3)}")
+    print(f"Post-normalization std  (R,G,B): {std.numpy().round(3)}")
+    # expect mean ≈ [0, 0, 0] and std ≈ [1, 1, 1]

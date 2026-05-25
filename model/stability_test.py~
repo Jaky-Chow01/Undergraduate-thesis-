@@ -1,0 +1,29 @@
+import torch
+from PIL import Image
+from torchvision import transforms
+
+base_transform = transforms.Compose([
+    transforms.Resize((224,224)),
+    transforms.ToTensor(),
+])
+
+noise_transform = transforms.Compose([
+    transforms.Resize((224,224)),
+    transforms.ColorJitter(brightness=0.2),
+    transforms.ToTensor(),
+])
+
+def compare_stability(model, image_path, device):
+    img = Image.open(image_path).convert("RGB")
+
+    x1 = base_transform(img).unsqueeze(0).to(device)
+    x2 = noise_transform(img).unsqueeze(0).to(device)
+
+    model.eval()
+    with torch.no_grad():
+        p1 = torch.sigmoid(model(x1))
+        p2 = torch.sigmoid(model(x2))
+
+    print("Base prediction:", p1.cpu().numpy())
+    print("Noisy prediction:", p2.cpu().numpy())
+    print("Difference:", torch.abs(p1 - p2).mean().item())

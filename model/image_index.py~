@@ -1,0 +1,30 @@
+import os
+import pandas as pd
+
+class ODIRImageIndex:
+    def __init__(self, base_dirs):
+        self.image_map = {}
+        self.build_index(base_dirs)
+
+    def build_index(self, base_dirs):
+        for base in base_dirs:
+            for img in os.listdir(base):
+                self.image_map[img] = os.path.join(base, img)
+
+    def get_path(self, image_name):
+        return self.image_map.get(image_name, None)
+
+
+base_dirs = [
+    "ODIR-5K/Training Images",
+    "ODIR-5K/Testing Images"
+]
+
+indexer = ODIRImageIndex(base_dirs)
+
+df = pd.read_excel("data.xlsx")
+
+df["filepath"] = df["image_name"].apply(indexer.get_path)
+
+# remove missing images (VERY IMPORTANT for publication quality)
+df = df.dropna(subset=["filepath"])

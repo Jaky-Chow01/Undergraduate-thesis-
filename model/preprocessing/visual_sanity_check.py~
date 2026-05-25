@@ -1,0 +1,57 @@
+import os
+import numpy as np
+import torch
+from PIL import Image
+from torchvision import transforms
+import matplotlib.pyplot as plt
+import pandas as pd
+
+# ── config (match your main script) ──────────────────────────
+LABEL_COLS = ["N", "D", "G", "C", "A", "H", "M", "O"]
+
+def get_image_path(image_name: str) -> str:
+    train_path = f"../real_dataset/ODIR-5K/ODIR-5K/Training Images/{image_name}"
+    test_path  = f"../real_dataset/ODIR-5K/ODIR-5K/Testing Images/{image_name}"
+    return train_path if os.path.exists(train_path) else test_path
+
+baseline_transform = transforms.Compose([
+    transforms.Resize((224, 224)),
+    transforms.ToTensor(),
+    transforms.Normalize(mean=[0.3013, 0.1916, 0.1041],
+                         std=[0.3105, 0.2125, 0.1388])
+])
+
+# ── function ──────────────────────────────────────────────────
+def visualize_preprocessing(df: pd.DataFrame, n: int = 5):
+    fig, axes = plt.subplots(n, 2, figsize=(8, n * 3))
+    fig.suptitle("Original vs Preprocessed", fontsize=13)
+
+    for i in range(n):
+        img_path = get_image_path(df.loc[i, "image"])
+        original = Image.open(img_path).convert("RGB")
+
+        # left: original
+        axes[i, 0].imshow(original)
+        axes[i, 0].set_title(f"Original  {np.array(original).shape}")
+        axes[i, 0].axis("off")
+
+        # right: preprocessed — undo normalization so it's displayable
+        tensor = baseline_transform(original)
+        mean      = torch.tensor([0.3013, 0.1916, 0.1041]).view(3, 1, 1)
+        std       = torch.tensor([0.3105, 0.2125, 0.1388]).view(3, 1, 1)
+        restored  = (tensor * std + mean).clamp(0, 1)
+        axes[i, 1].imshow(restored.permute(1, 2, 0).numpy())
+        axes[i, 1].set_title("Preprocessed  (224×224)")
+        axes[i, 1].axis("off")
+
+    plt.tight_layout()
+    plt.savefig("preprocessing_check.png", dpi=150)
+    print("Saved: preprocessing_check.png")
+    plt.show()
+
+
+# ── run ───────────────────────────────────────────────────────
+if __name__ == "__main__":
+    # uses seed 42 by default; change as needed
+    df = pd.read_csv("../real_dataset/train_seed42.csv")
+    visualize_preprocessing(df, n=5)

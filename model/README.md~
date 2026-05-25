@@ -1,0 +1,412 @@
+# Retinal Disease Classification using Deep Learning
+
+## 📋 Project Overview
+
+This is a **research-grade** two-stage deep learning pipeline for automated retinal disease classification using fundus images. The system combines:
+
+1. **U-Net** for automatic Region of Interest (ROI) detection and segmentation
+2. **EfficientNet** for multi-class disease classification
+
+### 🎯 Supported Disease Classes
+
+- Diabetic Retinopathy
+- Glaucoma  
+- Macular Scar
+- Healthy
+
+---
+
+## 🏗️ Project Structure
+
+```
+project/
+├── Dataset/                          # Dataset folder (not included in repo)
+│   ├── Diabetic Retinopathy/
+│   ├── Glaucoma/
+│   ├── Macular Scar/
+│   └── Healthy/
+│
+├── data/                             # Data loading and splitting
+│   ├── __init__.py
+│   └── data_loader.py                # Dataset loading and stratified splitting
+│
+├── preprocessing/                    # Image preprocessing
+│   ├── __init__.py
+│   ├── image_preprocessing.py        # CLAHE, normalization, noise reduction
+│   └── augmentation.py               # Medical image augmentation
+│
+├── segmentation/                     # U-Net segmentation
+│   ├── __init__.py
+│   ├── unet_model.py                 # U-Net architecture and loss functions
+│   └── roi_extraction.py             # ROI extraction from masks
+│
+├── classification/                   # EfficientNet classification
+│   ├── __init__.py
+│   └── efficientnet_model.py         # EfficientNet-based classifier
+│
+├── training/                         # Training utilities
+│   ├── __init__.py
+│   └── training_utils.py             # Callbacks, LR scheduling, class weights
+│
+├── evaluation/                       # Evaluation and explainability
+│   ├── __init__.py
+│   ├── metrics.py                    # Comprehensive metrics and visualization
+│   └── gradcam.py                    # Grad-CAM for explainability
+│
+├── utils/                            # Utilities and configuration
+│   ├── __init__.py
+│   ├── config.py                     # All hyperparameters and settings
+│   └── logger.py                     # Logging utilities
+│
+├── results/                          # Output directory (created automatically)
+│   ├── models/                       # Saved models
+│   ├── plots/                        # Visualizations
+│   └── logs/                         # Training logs
+│
+├── main.py                           # Main pipeline script
+├── requirements.txt                  # Python dependencies
+└── README.md                         # This file
+```
+
+---
+
+## 🚀 Getting Started
+
+### Prerequisites
+
+- Python 3.8 or higher
+- CUDA-capable GPU (recommended)
+- At least 8GB RAM (16GB recommended)
+
+### Installation
+
+1. **Clone or download this project**
+
+2. **Install dependencies**
+
+```bash
+pip install -r requirements.txt
+```
+
+### Required Python Packages
+
+```
+tensorflow>=2.13.0
+numpy>=1.24.0
+opencv-python>=4.8.0
+scikit-learn>=1.3.0
+matplotlib>=3.7.0
+seaborn>=0.12.0
+pandas>=2.0.0
+albumentations>=1.3.0
+```
+
+---
+
+## 📊 Dataset Preparation
+
+### Dataset Structure
+
+Organize your fundus images into class-wise folders:
+
+```
+Dataset/
+├── Diabetic Retinopathy/
+│   ├── image1.jpg
+│   ├── image2.jpg
+│   └── ...
+├── Glaucoma/
+│   ├── image1.jpg
+│   └── ...
+├── Macular Scar/
+│   └── ...
+└── Healthy/
+    └── ...
+```
+
+### Important Notes
+
+- Supported formats: `.jpg`, `.jpeg`, `.png`, `.bmp`
+- Images will be automatically resized to 224×224
+- The pipeline will automatically create stratified train/val/test splits (70/15/15)
+
+---
+
+## 🎮 Usage
+
+### Basic Usage
+
+Run the complete pipeline:
+
+```bash
+python main.py --skip-unet
+```
+
+### Command-Line Arguments
+
+```bash
+python main.py --help
+
+Arguments:
+  --skip-unet        Skip U-Net training (use preprocessed images directly)
+  --epochs N         Number of training epochs (default: 100)
+  --batch-size N     Batch size for training (default: 16)
+```
+
+### Example Commands
+
+```bash
+# Run with default settings
+python main.py --skip-unet
+
+# Custom epochs and batch size
+python main.py --skip-unet --epochs 50 --batch-size 32
+```
+
+---
+
+## 🔧 Configuration
+
+All hyperparameters are centralized in `utils/config.py`:
+
+### Key Configuration Options
+
+```python
+# Dataset
+SELECTED_CLASSES = ["Diabetic Retinopathy", "Glaucoma", "Macular Scar", "Healthy"]
+TRAIN_RATIO = 0.7
+VAL_RATIO = 0.15
+TEST_RATIO = 0.15
+
+# Image Size
+IMAGE_SIZE = (224, 224)
+
+# EfficientNet
+EFFICIENTNET_VERSION = 'B0'  # or 'B3'
+CLASSIFIER_BATCH_SIZE = 16
+CLASSIFIER_EPOCHS = 100
+CLASSIFIER_LEARNING_RATE = 1e-4
+
+# Training
+USE_EARLY_STOPPING = True
+EARLY_STOPPING_PATIENCE = 15
+USE_LR_SCHEDULER = True
+```
+
+---
+
+## 📈 Pipeline Stages
+
+### Stage 1: Data Loading and Preprocessing
+
+1. **Load images** from class folders
+2. **Stratified split** into train/val/test sets
+3. **Preprocessing pipeline**:
+   - Resize to 224×224
+   - Remove black background
+   - CLAHE contrast enhancement (LAB color space)
+   - Gaussian noise reduction
+   - Pixel normalization (0-1)
+
+### Stage 2: ROI Detection (U-Net)
+
+- **Option 1**: Train U-Net with annotated masks
+- **Option 2**: Use preprocessed images directly (automatic)
+
+### Stage 3: Data Augmentation
+
+Applied to training data:
+- Rotation (±15°)
+- Horizontal flip
+- Zoom (±10%)
+- Brightness variation (0.8-1.2)
+- Gaussian noise injection
+
+### Stage 4: Classification (EfficientNet)
+
+**Two-phase training**:
+
+1. **Phase 1**: Frozen base layers (transfer learning)
+2. **Phase 2**: Fine-tuning with unfrozen layers
+
+### Stage 5: Evaluation
+
+Comprehensive metrics:
+- Confusion matrix
+- Precision, Recall, Specificity
+- F1-score
+- ROC-AUC (per class and macro)
+- Classification report
+
+### Stage 6: Explainability (Grad-CAM)
+
+Generate visual explanations showing which regions influenced predictions.
+
+---
+
+## 📊 Results and Outputs
+
+After running the pipeline, you'll find:
+
+### Directory Structure
+
+```
+results/
+├── models/
+│   ├── efficientnet_classifier_best.keras
+│   └── efficientnet_classifier_finetuned_best.keras
+│
+├── plots/
+│   ├── class_distribution.png
+│   ├── training_history.png
+│   ├── evaluation/
+│   │   ├── confusion_matrix.png
+│   │   ├── confusion_matrix_normalized.png
+│   │   ├── roc_curves.png
+│   │   └── metrics_comparison.png
+│   └── gradcam/
+│       ├── gradcam_sample_1.png
+│       └── gradcam_grid.png
+│
+└── logs/
+    ├── main_pipeline_YYYYMMDD_HHMMSS.log
+    └── efficientnet_classifier_training_log.csv
+```
+
+---
+
+## 📝 Key Features
+
+### ✅ Research-Grade Quality
+
+- Modular, clean, well-documented code
+- Comprehensive logging
+- Reproducible results (fixed random seeds)
+- Publication-ready visualizations
+
+### ✅ Medical Image Best Practices
+
+- CLAHE enhancement in LAB color space
+- Stratified dataset splitting
+- Class-weight balancing
+- Medical-appropriate augmentation
+
+### ✅ Advanced Deep Learning
+
+- Transfer learning with EfficientNet
+- Two-phase training strategy
+- Learning rate scheduling
+- Early stopping
+- Model checkpointing
+
+### ✅ Comprehensive Evaluation
+
+- Multiple metrics beyond accuracy
+- Per-class and overall performance
+- ROC-AUC analysis
+- Visual explanations with Grad-CAM
+
+---
+
+## 🔬 For Researchers
+
+### Customization Points
+
+1. **Add more classes**: Update `SELECTED_CLASSES` in `config.py`
+2. **Change model**: Modify `EFFICIENTNET_VERSION` (B0, B1, B3)
+3. **Adjust augmentation**: Edit parameters in `augmentation.py`
+4. **Custom preprocessing**: Modify `FundusPreprocessor` class
+
+### Using Your Own U-Net Masks
+
+If you have ground truth segmentation masks:
+
+1. Prepare masks in the same directory structure as images
+2. Modify `step3_train_unet_segmentation()` in `main.py`
+3. Remove `skip_training=True` parameter
+
+---
+
+## 📚 Citation
+
+If you use this code in your research, please cite:
+
+```
+@misc{retinal_classification_2025,
+  author = {Your Name},
+  title = {Retinal Disease Classification using Two-Stage Deep Learning},
+  year = {2025},
+  publisher = {GitHub},
+  url = {https://github.com/yourusername/retinal-classification}
+}
+```
+
+---
+
+## 🐛 Troubleshooting
+
+### Common Issues
+
+**1. Out of Memory Error**
+
+```python
+# Reduce batch size in config.py
+CLASSIFIER_BATCH_SIZE = 8  # Instead of 16
+```
+
+**2. Dataset Not Found**
+
+```python
+# Check DATASET_DIR in config.py
+DATASET_DIR = "path/to/your/Dataset"
+```
+
+**3. TensorFlow GPU Issues**
+
+```bash
+# Check CUDA installation
+nvidia-smi
+
+# Install appropriate TensorFlow version
+pip install tensorflow[and-cuda]
+```
+
+---
+
+## 📞 Support
+
+For questions or issues:
+- Check the logs in `results/logs/`
+- Review error messages carefully
+- Ensure dataset structure matches requirements
+
+---
+
+## 📄 License
+
+This project is for research and educational purposes.
+
+---
+
+## 🙏 Acknowledgments
+
+- EfficientNet: [Tan & Le, 2019](https://arxiv.org/abs/1905.11946)
+- U-Net: [Ronneberger et al., 2015](https://arxiv.org/abs/1505.04597)
+- Grad-CAM: [Selvaraju et al., 2017](https://arxiv.org/abs/1610.02391)
+
+---
+
+## 🎓 Perfect for Thesis Work
+
+This codebase is designed specifically for thesis and research paper requirements:
+
+✅ Complete documentation  
+✅ Research-grade methodology  
+✅ Comprehensive evaluation  
+✅ Visual explanations  
+✅ Reproducible results  
+✅ Clean, modular architecture  
+
+---
+
+**Happy Research! 🚀🔬**

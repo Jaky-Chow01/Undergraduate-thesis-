@@ -1,0 +1,123 @@
+# Metadata restructuring
+
+import pandas as pd
+from sklearn.model_selection import train_test_split
+
+df = pd.read_csv("real_dataset/full_df.csv")
+
+rows = []
+
+for _, row in df.iterrows():
+
+    # LEFT EYE
+    rows.append({
+        "patient_id": row["ID"],
+        "image":      row["Left-Fundus"],
+        "eye":        "L",
+        "N": row["N"], "D": row["D"], "G": row["G"], "C": row["C"],
+        "A": row["A"], "H": row["H"], "M": row["M"], "O": row["O"]
+    })
+
+    # RIGHT EYE
+    rows.append({
+        "patient_id": row["ID"],
+        "image":      row["Right-Fundus"],
+        "eye":        "R",
+        "N": row["N"], "D": row["D"], "G": row["G"], "C": row["C"],
+        "A": row["A"], "H": row["H"], "M": row["M"], "O": row["O"]
+    })
+
+image_df = pd.DataFrame(rows)
+image_df.to_csv("image_level_dataset.csv", index=False)
+
+print("First row:  ", rows[0])
+print("Head:\n",      image_df.head())
+print("Shape:",       image_df.shape)
+
+# Each patient should appear twice
+patient_counts = image_df["patient_id"].value_counts()
+print("Patient counts:\n", patient_counts.value_counts())
+print(patient_counts.describe())
+
+# Verify no missing images or labels
+print("Missing images:", image_df["image"].isnull().sum())
+print(image_df[["N","D","G","C","A","H","M","O"]].isnull().sum())
+
+# ── patient-level aggregation ─────────────────────────────────
+LABEL_COLS  = ["N", "D", "G", "C", "A", "H", "M", "O"]
+
+patient_ids = image_df["patient_id"].unique()
+print("Unique patients:", len(patient_ids))
+
+# if any one eye shows disease, patient is positive
+patient_df = (
+    image_df
+    .groupby("patient_id")[LABEL_COLS]
+    .max()
+    .reset_index()
+)
+
+# ── FIX 1: stratify on ALL 8 labels, not just H ──────────────
+# Encode each patient's full label combination as a string key.
+# This keeps every rare class (especially H) balanced across splits.
+# Using H alone meant the other 7 labels were split randomly,
+# which caused the imbalance you saw in the label distribution plot.
+patient_df["strata"] = patient_df[LABEL_COLS].astype(str).agg("".join, axis=1)
+
+# Collapse rare combinations (< 5 patients) into "OTHER"
+# to avoid train_test_split failing on strata with 1–2 samples
+counts = patient_df["strata"].value_counts()
+valid  = counts[counts >= 5].index          # lowered from 10 → 5 for multi-label
+patient_df["strata"] = patient_df["strata"].apply(
+    lambda x: x if x in valid else "OTHER"
+)
+
+print("\nStrata distribution:")
+print(patient_df["strata"].value_counts())
+
+# ── patient-level splitting ───────────────────────────────────
+seeds = [42, 99, 202]
+
+for seed in seeds:
+    print(f"\n{'='*50}")
+    print(f"Processing Seed: {seed}")
+
+    train_p, temp_p = train_test_split(
+        patient_df,
+        test_size=0.30,
+        stratify=patient_df["strata"],
+        random_state=seed
+    )
+
+    val_p, test_p = train_test_split(
+        temp_p,
+        test_size=0.50,
+        stratify=temp_p["strata"],   # FIX 2: stratify val/test split too
+        random_state=seed
+    )
+
+    # map back to image level
+    train_df = image_df[image_df["patient_id"].isin(train_p["patient_id"])]
+    val_df   = image_df[image_df["patient_id"].isin(val_p["patient_id"])]
+    test_df  = image_df[image_df["patient_id"].isin(test_p["patient_id"])]
+
+    # leakage check
+    assert set(train_df.patient_id).isdisjoint(val_df.patient_id)
+    assert set(train_df.patient_id).isdisjoint(test_df.patient_id)
+    assert set(val_df.patient_id).isdisjoint(test_df.patient_id)
+    print("✓ No patient leakage")
+
+    # label distribution per split
+    print(f"\n  Train  ({len(train_df)} images, {len(train_p)} patients)")
+    print(train_df[LABEL_COLS].mean().round(3).to_string())
+    print(f"\n  Val    ({len(val_df)} images, {len(val_p)} patients)")
+    print(val_df[LABEL_COLS].mean().round(3).to_string())
+    print(f"\n  Test   ({len(test_df)} images, {len(test_p)} patients)")
+    print(test_df[LABEL_COLS].mean().round(3).to_string())
+
+    # FIX 3: consistent filename pattern — was test.csv{seed}
+    train_df.to_csv(f"real_dataset/train_seed{seed}.csv", index=False)
+    val_df.to_csv(  f"real_dataset/val{seed}.csv",        index=False)
+    test_df.to_csv( f"real_dataset/test_seed{seed}.csv",  index=False)
+
+    print(f"\n  Saved: train_seed{seed}.csv | val{seed}.csv | test_seed{seed}.csv")
